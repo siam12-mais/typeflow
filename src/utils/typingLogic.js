@@ -14,11 +14,14 @@ export const calculateAccuracy = (correctChars, totalChars) => {
 
 export const calculateMistakes = (userInput, targetText) => {
   let mistakes = 0;
-  for (let i = 0; i < Math.max(userInput.length, targetText.length); i++) {
-    if (userInput[i] !== targetText[i]) {
+  const maxLength = Math.max(userInput.length, targetText.length);
+  
+  for (let i = 0; i < maxLength; i++) {
+    if ((userInput[i] || '') !== (targetText[i] || '')) {
       mistakes++;
     }
   }
+  
   return mistakes;
 };
 
@@ -73,35 +76,164 @@ export const generateHomeRowExercises = () => {
 };
 
 export const assignUserLevel = (assessment) => {
-  const { wpm, accuracy, questionnaire } = assessment;
+  const { wpm = 0, accuracy = 0, questionnaire = {} } = assessment;
 
-  // Base scoring
+  // Validate inputs
+  const validWPM = Math.max(0, Math.min(200, wpm));
+  const validAccuracy = Math.max(0, Math.min(100, accuracy));
+
+  // Weighted scoring system (out of 100)
   let score = 0;
+  const weights = {
+    experience: 15,
+    touchTyping: 20,
+    typeWithoutLooking: 25,
+    accuracy: 20,
+    speed: 20,
+  };
 
-  // WPM scoring
-  if (wpm < 30) score += 1;
-  else if (wpm < 50) score += 2;
-  else if (wpm < 70) score += 3;
-  else score += 4;
+  // 1. Typing Experience Score (0-15 points)
+  let experienceScore = 0;
+  switch (questionnaire.typingExperience) {
+    case 'never':
+      experienceScore = 0;
+      break;
+    case 'little':
+      experienceScore = 7;
+      break;
+    case 'regularly':
+      experienceScore = 15;
+      break;
+    default:
+      experienceScore = 0;
+  }
+  score += experienceScore;
 
-  // Accuracy scoring
-  if (accuracy < 85) score += 1;
-  else if (accuracy < 95) score += 2;
-  else score += 3;
+  // 2. Touch Typing Knowledge Score (0-20 points)
+  let touchTypingScore = 0;
+  switch (questionnaire.touchTypingKnowledge) {
+    case 'no':
+      touchTypingScore = 0;
+      break;
+    case 'little':
+      touchTypingScore = 10;
+      break;
+    case 'yes':
+      touchTypingScore = 20;
+      break;
+    default:
+      touchTypingScore = 0;
+  }
+  score += touchTypingScore;
 
-  // Questionnaire factors
-  const hasTypedBefore = questionnaire.typingExperience !== 'never';
-  const knowsTouchTyping = questionnaire.touchTypingKnowledge !== 'no';
-  const canTypeWithoutLooking = questionnaire.canTypeWithoutLooking !== 'no';
+  // 3. Type Without Looking Score (0-25 points) - Most Important
+  let typeWithoutLookingScore = 0;
+  switch (questionnaire.canTypeWithoutLooking) {
+    case 'no':
+      typeWithoutLookingScore = 0;
+      break;
+    case 'sometimes':
+      typeWithoutLookingScore = 12;
+      break;
+    case 'yes':
+      typeWithoutLookingScore = 25;
+      break;
+    default:
+      typeWithoutLookingScore = 0;
+  }
+  score += typeWithoutLookingScore;
 
-  if (hasTypedBefore) score += 1;
-  if (knowsTouchTyping) score += 1;
-  if (canTypeWithoutLooking) score += 1;
+  // 4. Accuracy Score (0-20 points)
+  let accuracyScore = 0;
+  if (validAccuracy < 70) {
+    accuracyScore = 0;
+  } else if (validAccuracy < 85) {
+    accuracyScore = 8;
+  } else if (validAccuracy < 95) {
+    accuracyScore = 14;
+  } else {
+    accuracyScore = 20;
+  }
+  score += accuracyScore;
 
-  // Level assignment
-  if (score <= 4) return 'BEGINNER';
-  if (score <= 7) return 'INTERMEDIATE';
-  return 'ADVANCED';
+  // 5. Speed Score (0-20 points)
+  let speedScore = 0;
+  if (validWPM < 20) {
+    speedScore = 0;
+  } else if (validWPM < 40) {
+    speedScore = 6;
+  } else if (validWPM < 60) {
+    speedScore = 12;
+  } else if (validWPM < 80) {
+    speedScore = 18;
+  } else {
+    speedScore = 20;
+  }
+  score += speedScore;
+
+  // Determine level based on weighted score
+  let level = 'BEGINNER';
+  let recommendedPath = 'HOME_ROW';
+
+  if (score >= 70 && typeWithoutLookingScore >= 20 && touchTypingScore >= 15 && validAccuracy >= 95) {
+    level = 'ADVANCED';
+    recommendedPath = 'SPEED_AND_ACCURACY';
+  } else if (score >= 45 && typeWithoutLookingScore >= 12 && validAccuracy >= 85) {
+    level = 'INTERMEDIATE';
+    recommendedPath = 'SKILL_IMPROVEMENT';
+  } else {
+    level = 'BEGINNER';
+    recommendedPath = 'HOME_ROW';
+  }
+
+  // Build strengths and improvements
+  const strengths = [];
+  const improvements = [];
+
+  // Analyze strengths
+  if (validAccuracy >= 95) {
+    strengths.push('Excellent Accuracy');
+  }
+  if (validWPM >= 60) {
+    strengths.push('Strong Speed');
+  }
+  if (typeWithoutLookingScore >= 20) {
+    strengths.push('Touch Typing Skills');
+  }
+  if (experienceScore >= 10) {
+    strengths.push('Typing Experience');
+  }
+
+  // Analyze improvements
+  if (validAccuracy < 90) {
+    improvements.push('Improve Accuracy');
+  }
+  if (validWPM < 50) {
+    improvements.push('Increase Speed');
+  }
+  if (typeWithoutLookingScore < 15) {
+    improvements.push('Learn Touch Typing Technique');
+  }
+  if (touchTypingScore < 15) {
+    improvements.push('Master Finger Placement');
+  }
+
+  return {
+    level,
+    score: Math.round(score),
+    strengths: strengths.length > 0 ? strengths : ['Good Start!'],
+    improvements: improvements.length > 0 ? improvements : ['Continue Practicing'],
+    recommendedPath,
+    details: {
+      wpm: validWPM,
+      accuracy: validAccuracy,
+      experienceScore,
+      touchTypingScore,
+      typeWithoutLookingScore,
+      accuracyScore,
+      speedScore,
+    },
+  };
 };
 
 export const generateAssessmentText = () => {
